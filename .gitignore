@@ -1,0 +1,47 @@
+# === Build Artifacts ===
+.gradle/
+build/
+bin/
+out/
+
+# === IDEs ===
+# Eclipse
+.project
+.classpath
+.settings/
+
+# IntelliJ
+.idea/
+*.ipr
+*.iml
+*.iws
+
+# VS Code
+.vscode/
+.factorypath
+
+# NetBeans
+nb-configuration.xml
+
+# === Sistema Operativo ===
+.DS_Store  # macOS
+Thumbs.db  # Windows
+ehthumbs.db
+
+# === Vim ===
+*.swp
+*.swo
+
+# === Parches ===
+*.orig
+*.rej
+
+# === Entornos Locales ===
+.env
+localstack-data/
+jdk-17/
+jdk-17/**
+
+# === Certificados y configuración específica ===
+.certs/
+.quarkus/cli/plugins/
