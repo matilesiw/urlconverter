@@ -45,3 +45,6 @@ jdk-17/**
 # === Certificados y configuración específica ===
 .certs/
 .quarkus/cli/plugins/
+
+.ps1
+.sh
