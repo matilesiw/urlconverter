@@ -17,3 +17,6 @@ localstack-data/
 
 .DS_Store
 Thumbs.db
+
+*.sh
+*.ps1
