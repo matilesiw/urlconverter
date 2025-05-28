@@ -19,6 +19,7 @@ public class LocalCacheDaoImpl implements LocalCacheDao {
         this.shortCodeCache = Caffeine.newBuilder()
                 .maximumSize(config.getLocalCacheMaximumSize())
                 .expireAfterWrite(config.getLocalCacheMinutesExpire(), TimeUnit.MINUTES)
+                .expireAfterAccess(config.getLocalCacheMinutesExpire(), TimeUnit.MINUTES)
                 .build();
     }
 

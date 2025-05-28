@@ -37,36 +37,45 @@ public class UrlServiceImpl implements UrlService {
 
 	@Override
 	public Uni<String> shortenUrl(String url) {
+		// Primer capa de persistencia buscamos en cache local
 		String shortCodeLocal = localCacheDao.getShortCode(url);
 		if (shortCodeLocal != null) {
+			//Si ya existe retornamos la URL corta
 			logger.info("Se encontró en Cache Local el shortCode: {} para la url: {}", shortCodeLocal, url);
 			return Uni.createFrom().item(this.buildShortUrl(shortCodeLocal));
 		}
-
+        
+		// Segunda capa de persistencia buscamos en Redis
 		return redisDao.getShortCodeByLongUrl(url).onItem().transformToUni(shortCodeRedis -> {
 		    if (shortCodeRedis.isPresent()) {
+		    	// Si existe retornamos la URL corta y guardamos en localCache para mayor velocidad en posteriores accesos
 		        String shortCode = shortCodeRedis.get();
 		        logger.info("Se encontró en Redis el shortCode: {} para la url: {}", shortCode, url);
 		        this.saveInLocalCache(url, shortCode);
 		        return Uni.createFrom().item(this.buildShortUrl(shortCode));
 		    }
-
+            // Tercera capa de persistencia ya tenemos que generar el codigo uno dado una URL larga
 		    String generatedShortCode = decodedUtils.generateShortCode(url);
 		    if (generatedShortCode == null || generatedShortCode.isBlank()) {
+		    	// Si por algun motivo no se genera el shortCode que devuelva la URL original
 		        logger.warn("No se generó el shortCode para la URL: {}", url);
 		        return Uni.createFrom().item(url);
 		    }
-
+            // Buscamos si existe en dynamo un registro correspondiente al shortCode generado
 		    return dynamoDao.findByShortCode(generatedShortCode).onItem().transformToUni(urlObject -> {
 		        if (urlObject.isPresent()) {
+		        	// Si existe generamos la URL, ademas si estaba inactiva la volvemos a activar y 
+		        	// Verificamos que no haya colisiones para mantener unicidad
 		            logger.info("Se encontró en Dynamo el shortCode existente: {}", generatedShortCode);
 		            return this.buildShortUrlWhenExistsInDynamo(urlObject.get(), generatedShortCode, url);
 		        } else {
+		        	// Retornamos la URL corta nueva y guardamos en las bases
 		            logger.info("ShortCode nuevo generado: {} para url: {}", generatedShortCode, url);
 		            return this.buildShortUrlWhenIsNew(generatedShortCode, url);
 		        }
 		    });
 		}).onFailure().recoverWithItem(err -> {
+			// Si se falla en algun momento retornamos la url original
 		    logger.error("Error al acortar la URL: {}", url, err);
 		    return url;
 		});
@@ -74,42 +83,49 @@ public class UrlServiceImpl implements UrlService {
 
 	@Override
 	public Uni<Optional<String>> getUrlByShortCode(String shortCode) {
+		// Primer capa de persistencia buscamos en cache local
 		String longUrlLocal = localCacheDao.getLongUrl(shortCode);
 		if (longUrlLocal != null) {
+			// Si ya existe retornamos la URL larga
 			logger.info("Se encontró en Cache Local la url: {} para el shortCode: {}", longUrlLocal, shortCode);
 			return Uni.createFrom().item(Optional.of(longUrlLocal));
 		}
 
-		return redisDao.getLongUrlByShortCode(shortCode).onItem().transformToUni(longUrl -> {
-			if (longUrl.isPresent()) {
-				logger.info("Se encontró en Redis la url: {} para el shortCode: {}", longUrl.get(), shortCode);
-				this.saveInLocalCache(longUrl.get(), shortCode);
-				return Uni.createFrom().item(longUrl);
+		// Segunda capa de persistencia buscamos en Redis
+		return redisDao.getLongUrlByShortCode(shortCode).onItem().transformToUni(longUrlRedis -> {
+			if (longUrlRedis.isPresent()) {
+				// Si existe retornamos la URL larga y guardamos en localCache para mayor velocidad en posteriores accesos
+				logger.info("Se encontró en Redis la url: {} para el shortCode: {}", longUrlRedis.get(), shortCode);
+				this.saveInLocalCache(longUrlRedis.get(), shortCode);
+				return Uni.createFrom().item(longUrlRedis);
 			}
-
-			return dynamoDao.findByShortCode(shortCode).onItem().invoke(urlOptionalDynamo -> {
-				if (urlOptionalDynamo.isPresent() && urlOptionalDynamo.get().isActive()) {
-					Url urlObject = urlOptionalDynamo.get();
-					String url = urlObject.getLongUrl();
-					this.saveInAllCaches(url, shortCode);
-					logger.info("Se encontró en Dynamo la url: {} para el shortCode: {}", url, shortCode);
-				}
-			}).onItem().transform(urlOptional -> {
-				if (urlOptional.isPresent() && urlOptional.get().isActive()) {
-					return Optional.of(urlOptional.get().getLongUrl());
-				} else {
-					return Optional.<String>empty();
-				}
-			});
+			// Tercera capa de persistencia buscamos en dynamo por el shortCode
+			return dynamoDao.findByShortCode(shortCode)
+				    .onItem().transform(urlOptional -> {
+				        if (urlOptional.isPresent() && urlOptional.get().isActive()) {
+				        	// Si existe y esta activo retornamos la URL larga de dynamo y guardamos en cache los datos
+				            Url urlObject = urlOptional.get();
+				            String longUrlDynamo = urlObject.getLongUrl();
+				            this.saveInAllCaches(longUrlDynamo, shortCode);
+				            logger.info("Se encontró en Dynamo la url: {} para el shortCode: {}", longUrlDynamo, shortCode);
+				            return Optional.of(longUrlDynamo);
+				        } else {
+				        	// Devolvemos vacio para que el contoller decida que hacer
+				            return Optional.<String>empty();
+				        }
+				    });
 		}).onFailure().recoverWithItem(err -> {
 			logger.error("Error al obtener longUrl desde shortCode: {}", shortCode, err);
+			// Si falla devolvemos vacio para que el contoller decida que hacer y no perder disponibilidad
 			return Optional.empty();
 		});
 	}
 
 	@Override
 	public Uni<Boolean> deactivateShortUrl(String shortCode) {
+		// Busca en dynamo si existe el dato
 		return dynamoDao.findByShortCode(shortCode).flatMap(urlOptional -> {
+			// Si no existe o ya esta inactivo devuelve false para tirar error en controller
 			if (urlOptional.isEmpty()) {
 				logger.info("{} no existe.", shortCode);
 				return Uni.createFrom().item(false);
@@ -121,12 +137,17 @@ public class UrlServiceImpl implements UrlService {
 				logger.info("{} ya se encuentra desactivada.", url.getLongUrl());
 				return Uni.createFrom().item(false);
 			}
-
+            // En caso que sea un dato activo se desactiva en Dynamo y se borra en cache
 			url.setActive(false);
-			return dynamoDao.update(url).flatMap(unused -> redisDao.deleteShortCode(shortCode)).onItem()
-					.invoke(() -> logger.info("Se eliminó shortCode de Redis: {}", shortCode))
-					.flatMap(unused -> redisDao.deleteLongUrl(url.getLongUrl())).onItem()
-					.invoke(() -> logger.info("Se eliminó longUrl de Redis: {}", url.getLongUrl())).replaceWith(true);
+			return dynamoDao.update(url)
+					.flatMap(unused -> redisDao.deleteShortCode(shortCode))
+					.onItem().invoke(() -> logger.info("Se eliminó shortCode de Redis: {}", shortCode))
+					.flatMap(unused -> redisDao.deleteLongUrl(url.getLongUrl()))
+					.onItem().invoke(() -> logger.info("Se eliminó longUrl de Redis: {}", url.getLongUrl()))
+					.invoke(() -> deleteInLocalCache(url.getLongUrl(), shortCode))
+					
+					.replaceWith(true);
+			
 		}).onFailure().recoverWithItem(err -> {
 			logger.error("Error al desactivar shortCode: {}", shortCode, err);
 			return false;
@@ -177,6 +198,11 @@ public class UrlServiceImpl implements UrlService {
 	private void saveInLocalCache(String url, String shortCode) {
 		localCacheDao.putShortCode(url, shortCode);
 		localCacheDao.putLongUrl(shortCode, url);
+	}
+	
+	private void deleteInLocalCache(String url, String shortCode) {
+		localCacheDao.invalidateByLongUrl(url);
+		localCacheDao.invalidateByShortCode(shortCode);
 	}
 
 	private void saveInAllCaches(String url, String shortCode) {

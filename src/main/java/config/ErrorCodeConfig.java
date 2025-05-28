@@ -25,6 +25,15 @@ public class ErrorCodeConfig {
     @ConfigProperty(name = "validation.api-key.invalid")
     String invalidApiKey;
 
+    @ConfigProperty(name = "validation.url.url_not_desactivate")
+	private String urlNotDesactivate;
+
+    @ConfigProperty(name = "validation.method_not_allowed")
+	private String methodNotAllowed;
+
+    @ConfigProperty(name = "validation.generic_validation_error")
+	private String genericValidationError;
+
     public String getCodeUrlEmpty(){
         return empty;
     }
@@ -47,6 +56,18 @@ public class ErrorCodeConfig {
 
 	public String getInvalidApiKey() {
 		return invalidApiKey;
+	}
+
+	public String getUrlNotDesactivate() {
+		return urlNotDesactivate;
+	}
+
+	public String getMethodNotAllowed() {
+		return methodNotAllowed;
+	}
+
+	public String getGenericValidationError() {
+		return genericValidationError;
 	}
 
 }

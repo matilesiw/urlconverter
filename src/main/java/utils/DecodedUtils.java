@@ -4,7 +4,8 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
-import org.jboss.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import config.UrlConverterConfig;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -12,7 +13,7 @@ import jakarta.inject.Inject;
 
 @ApplicationScoped
 public class DecodedUtils {
-    private static final Logger logger = Logger.getLogger(DecodedUtils.class);
+	private static final Logger logger = LoggerFactory.getLogger(DecodedUtils.class);
 
     private static final String BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private final UrlConverterConfig config;
@@ -22,6 +23,7 @@ public class DecodedUtils {
         this.config = config;
     }
     
+    // Genero siempre el mismo codigo para una misma URL
     public String generateShortCode(String url){
         try{
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -30,7 +32,8 @@ public class DecodedUtils {
             int size = config.getShortCodeSize();
             return base62.length() >= size ? base62.substring(0, size) : base62;
         } catch(Exception e){
-            logger.error("Error generando shortCode con la url " + url);
+            // En caso de que falle quiero seguir con el flujo
+            logger.error("Error generando shortCode con la URL {}", url);
             return null;
         }
     }

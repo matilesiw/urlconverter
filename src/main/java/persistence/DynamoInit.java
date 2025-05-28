@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import config.UrlConverterConfig;
 
 @ApplicationScoped
+//Crea la base de datos si es necesario echo para local y no crear la base de datos con una herramienta externa
 public class DynamoInit {
 	private static final Logger logger = LoggerFactory.getLogger(DynamoInit.class);
 
@@ -33,7 +34,7 @@ public class DynamoInit {
 
     @PostConstruct
     public void init() {
-        if (!"local".equalsIgnoreCase(config.getEnv())) {
+        if (!("local").equalsIgnoreCase(config.getEnv())) {
             return;
         }
 

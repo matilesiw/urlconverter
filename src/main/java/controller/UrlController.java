@@ -32,11 +32,11 @@ public class UrlController {
     private final UrlConverterConfig config;
     private final ErrorCodeConfig errorMessage;
 
-    private final static String URL_DESACTIVATE = "Url desactivada correctamente.";
-    private final static String URL_NOT_DESACTIVATE = "Url no desactivada.";
-
     @Inject
-    UrlController(UrlService urlService, MetricService metricService, UrlConverterConfig config, ErrorCodeConfig errorMessage) {
+    UrlController(UrlService urlService, 
+    		MetricService metricService, 
+    		UrlConverterConfig config, 
+    		ErrorCodeConfig errorMessage) {
         this.urlService = urlService;
         this.metricService = metricService;
         this.config = config;
@@ -48,33 +48,46 @@ public class UrlController {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     @ApiKeySecured
-    public Uni<Response> shorten(@Valid UrlRequest request) {
+    public Uni<Response> shorten(
+    		@Valid UrlRequest request) {
     	String longUrl = request.getUrl();
 
     	return urlService.shortenUrl(longUrl)
+    			// En caso de error devolvemos URL original
     	        .onFailure().recoverWithItem(err -> longUrl)
-    	        .onItem().transform(shortUrl -> {
-    	            boolean fallback = longUrl.equals(shortUrl);
-    	            ShortUrlResponse response = new ShortUrlResponse(shortUrl, fallback);
+    	        // En caso de no fallar el service devolvemos la URL que retorna
+    	        .onItem().transform(url -> {
+    	        	// Si trae la URL original es por que no se pudo acortar la URL
+    	        	// pero para no perder disponibilidad devolvemos la URL original
+    	            boolean fallback = longUrl.equals(url);
+    	            ShortUrlResponse response = new ShortUrlResponse(url, fallback);
     	            return ResponseUtils.ok(response);
     	        });
     }
 
     @GET
     @Path("/{shortCode}")
-    public Uni<Response> redirectToLongUrl(@PathParam("shortCode") String shortCode, @Context RoutingContext ctx) {
+    public Uni<Response> redirectToLongUrl(
+    		@PathParam("shortCode") String shortCode, 
+    		@Context RoutingContext ctx) {
+    	// Solo se aceptan codigos con nuestra longitud configurada
     	Response validationError = ResponseUtils.validateShortCode(shortCode, config.getShortCodeSize());
     	if (validationError != null) {
     	    return Uni.createFrom().item(validationError);
     	}
     	
         return urlService.getUrlByShortCode(shortCode)
+        	// En caso de no fallar el service redireccionamos segun corresponda
             .onItem().transform(urlOptional -> {
+            	// Si existe URL generada previamente redireccionamos alli,
+            	// si no se redirecciona a una configurada por default
+            	boolean fallback = !urlOptional.isPresent();
                 String urlToRedirect = urlOptional.orElse(config.getDefaultRedirect());
-                boolean fallback = !urlOptional.isPresent();
+                // Se envian las metricas a un servicio externo
                 metricService.buildAndSendMetric(shortCode, urlToRedirect, fallback, ctx);
                 return ResponseUtils.redirect(urlToRedirect);
             })
+            // En caso de error redirecciona a URL configurada por default
             .onFailure().recoverWithItem(err -> {
                 String fallbackUrl = config.getDefaultRedirect();
                 metricService.buildAndSendMetric(shortCode, fallbackUrl, true, ctx);
@@ -86,27 +99,33 @@ public class UrlController {
     @Path("/{shortCode}/desactivate")
     @Produces(MediaType.APPLICATION_JSON)
     @ApiKeySecured
-    public Uni<Response> desactivateShortUrl(@PathParam("shortCode") String shortCode) {
+    public Uni<Response> desactivateShortUrl(
+    		@PathParam("shortCode") String shortCode) {
+    	//Solo se aceptan codigos con nuestra longitud configurada
     	Response validationError = ResponseUtils.validateShortCode(shortCode, config.getShortCodeSize());
     	if (validationError != null) {
     	    return Uni.createFrom().item(validationError);
     	}
     	
         return urlService.deactivateShortUrl(shortCode)
+        	// Recibimos un boolean definiendo si se desactivo la URL
             .onItem().transform(success -> {
                 if (success) {
-                    return ResponseUtils.ok(URL_DESACTIVATE);
+                	// true devolvemos un 200
+                    return ResponseUtils.ok("Url desactivada correctamente.");
                 } else {
+                	// false devolvemos un 404 con un codigo de error
                     return ResponseUtils.error(
                         Response.Status.NOT_FOUND,
                         errorMessage.getUrlNotFoundOrInactive(),
                         null, null);
                 }
             })
+            // En caso de error devolvemos un 500 con un codigo de error
             .onFailure().recoverWithItem(err -> 
                 ResponseUtils.error(
                     Response.Status.INTERNAL_SERVER_ERROR,
-                    URL_NOT_DESACTIVATE,
+                    errorMessage.getUrlNotDesactivate(),
                     null, null
                 )
             );

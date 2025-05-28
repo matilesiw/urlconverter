@@ -1,5 +1,6 @@
 package exceptions;
 
+import config.ErrorCodeConfig;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
@@ -8,6 +9,11 @@ import utils.ResponseUtils;
 
 @Provider
 public class ValidationExceptionHandler implements ExceptionMapper<ConstraintViolationException> {
+	private final ErrorCodeConfig messageError;
+	
+	ValidationExceptionHandler(ErrorCodeConfig messageError){
+		this.messageError = messageError;
+	}
 
     @Override
     public Response toResponse(ConstraintViolationException exception) {
@@ -15,7 +21,7 @@ public class ValidationExceptionHandler implements ExceptionMapper<ConstraintVio
                                .stream()
                                .findFirst()
                                .map(v -> v.getMessage())
-                               .orElse("validation_error");
+                               .orElse(messageError.getGenericValidationError());
 
         return ResponseUtils.error(Response.Status.BAD_REQUEST, code, null, null);
     }
