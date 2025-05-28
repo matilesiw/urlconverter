@@ -46,5 +46,5 @@ jdk-17/**
 .certs/
 .quarkus/cli/plugins/
 
-.ps1
-.sh
+*.ps1
+*.sh
