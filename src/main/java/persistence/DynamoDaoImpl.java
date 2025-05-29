@@ -38,7 +38,7 @@ public class DynamoDaoImpl implements DynamoDao {
 
 	@Override
 	public Uni<Void> save(Url url) {
-		return Uni.createFrom().completionStage(() -> table.putItem(url)).onFailure().invoke(e -> {
+		return Uni.createFrom().completionStage(table.putItem(url)).onFailure().invoke(e -> {
 			logger.error("Error Dynamo al guardar url: {}", url, e);
 			throw new DaoException("Error Dynamo al guardar url: " + url, e);
 		}).replaceWithVoid();
@@ -46,14 +46,14 @@ public class DynamoDaoImpl implements DynamoDao {
 
 	@Override
 	public Uni<Optional<Url>> findByShortCode(String shortCode) {
-		return Uni.createFrom().completionStage(() -> table.getItem(r -> r.key(k -> k.partitionValue(shortCode))))
+		return Uni.createFrom().completionStage(table.getItem(r -> r.key(k -> k.partitionValue(shortCode))))
 				.onFailure().invoke(e -> logger.error("Error Dynamo al buscar por shortCode: {}", shortCode, e))
 				.map(Optional::ofNullable);
 	}
 
 	@Override
 	public Uni<Void> update(Url url) {
-		return Uni.createFrom().completionStage(() -> table.updateItem(url)).onFailure().invoke(e -> {
+		return Uni.createFrom().completionStage(table.updateItem(url)).onFailure().invoke(e -> {
 			logger.error("Error Dynamo al actualizar url: {}", url, e);
 			throw new DaoException("Error Dynamo al actualizar url: " + url, e);
 		}).replaceWithVoid();
